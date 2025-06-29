@@ -12,6 +12,7 @@ from chromatix.functional.sources import (
     objective_point_source,
     plane_wave,
     point_source,
+    gaussian_plane_wave
 )
 from chromatix.typing import ArrayLike, ScalarLike
 
@@ -20,6 +21,7 @@ __all__ = [
     "ObjectivePointSource",
     "PlaneWave",
     "GenericField",
+    "GaussianPlaneWave",
 ]
 
 FieldPupil = Callable[[Field], Field]
@@ -253,6 +255,60 @@ class GenericField(nn.Module):
             amplitude,
             phase,
             power,
+            self.pupil,
+            self.scalar,
+        )
+
+class GaussianPlaneWave(nn.Module):
+    """
+    Generates a Gaussian plane wave with a given waist size.
+
+    The attributes ``kykx``, ``power``, and ``amplitude`` can be learned by
+    using ``chromatix.utils.trainable``.
+
+    Attributes:
+        shape: The shape (height and width) of the ``Field`` to be created.
+        dx: The spacing of the samples of the ``Field``.
+        spectrum: The wavelengths included in the ``Field`` to be created.
+        spectral_density: The weights of each wavelength in the ``Field`` to
+            be created.
+        power: The total power that the result should be normalized to,
+            defaults to 1.0.
+        amplitude: The amplitude of the electric field. For ``ScalarField`` this
+            doesnt do anything, but it is required for ``VectorField`` to set
+            the polarization.
+        kykx: Defines the orientation of the plane wave. Should be an
+            array of shape `[2,]` in the format [ky, kx].
+        pupil: If provided, will be called on the field to apply a pupil.
+        scalar: Whether the result should be ``ScalarField`` (if True) or
+            ``VectorField`` (if False). Defaults to True.
+    """
+    
+    shape: tuple[int, int]
+    dx: ScalarLike
+    spectrum: ScalarLike
+    spectral_density: ScalarLike
+    waist: ScalarLike
+    power: ScalarLike | None = 1.0
+    amplitude: ScalarLike = 1.0
+    kykx: ArrayLike | tuple[float, float] = (0.0, 0.0)
+    pupil: FieldPupil | None = None
+    scalar: bool = True
+
+    @nn.compact
+    def __call__(self) -> ScalarField | VectorField:
+        kykx = register(self, "kykx")
+        power = register(self, "power")
+        amplitude = register(self, "amplitude")
+        return gaussian_plane_wave(
+            self.shape,
+            self.dx,
+            self.spectrum,
+            self.spectral_density,
+            self.waist,
+            power,
+            amplitude,
+            kykx,
             self.pupil,
             self.scalar,
         )

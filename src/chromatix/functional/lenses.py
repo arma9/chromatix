@@ -5,6 +5,7 @@ from chromatix.field import ScalarField, VectorField, cartesian_to_spherical
 from chromatix.functional.amplitude_masks import amplitude_change
 from chromatix.functional.convenience import optical_fft
 from chromatix.functional.phase_masks import phase_change
+from chromatix.functional.propagation import asm_propagate
 from chromatix.functional.rays import (
     compute_free_space_abcd,
     compute_plano_convex_spherical_lens_abcd,
@@ -25,6 +26,7 @@ __all__ = [
     "thin_lens",
     "ff_lens",
     "df_lens",
+    "fd_lens",
     "microlens_array",
     "hexagonal_microlens_array",
     "rectangular_microlens_array",
@@ -196,6 +198,61 @@ def df_lens(
     L = jnp.sqrt(jnp.complex64(field.spectrum * f / n))  # Lengthscale L
     phase = jnp.pi * (1 - d / f) * l2_sq_norm(field.grid) / jnp.abs(L) ** 2
     return field * jnp.exp(1j * phase)
+
+
+def fd_lens(
+    field: Field,
+    f: ScalarLike,
+    d: ScalarLike,
+    n: ScalarLike,
+    NA: ScalarLike | None = None,
+    inverse: bool = False,
+) -> Field:
+    """
+    Applies a thin lens placed a distance ``f`` after the incoming ``Field``.
+    Then propagates a distance ``d`` after the lens.
+
+    This implements true physical optics: propagate distance f → apply thin lens → propagate distance d.
+    The lens focal length is assumed to be the same as the first propagation distance ``f``.
+
+    Args:
+        field: The ``Field`` to which the lens will be applied.
+        f: Distance from the incoming ``Field`` to the lens (also used as lens focal length).
+        d: Distance propagated after the lens.
+        n: Refractive index of the propagation medium.
+        NA: If provided, the NA of the lens. By default, no pupil is applied
+            to the incoming ``Field``.
+        inverse: Whether to use negative distances (default is False).
+
+    Returns:
+        The ``Field`` propagated a distance ``d`` after the lens.
+    """
+    if inverse:
+        # if inverse, propagate over negative distances
+        f = -f
+        d = -d
+    
+    # First propagate distance f to reach the lens using ASM (exact propagation)
+    # We need some padding to avoid artifacts - using a reasonable default
+    N_pad = max(field.spatial_shape) // 4  # 25% padding as reasonable default
+    field = asm_propagate(field, f, n, N_pad=N_pad, mode="same")
+    
+    # Apply the thin lens phase
+    # Note: For a thin lens, we need the actual focal length of the lens
+    # In this case, we assume the lens focal length is the same as the first propagation distance
+    L = jnp.sqrt(field.spectrum * f / n)  
+    phase = -jnp.pi * l2_sq_norm(field.grid) / L**2
+    field = field * jnp.exp(1j * phase)
+    
+    # Apply pupil if NA is provided
+    if NA is not None:
+        D = 2 * f * NA / n  # Expression for NA yields width of pupil
+        field = circular_pupil(field, D)
+    
+    # Finally propagate distance d after the lens
+    field = asm_propagate(field, d, n, N_pad=N_pad, mode="same")
+    
+    return field
 
 
 def microlens_array(

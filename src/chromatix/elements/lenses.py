@@ -10,7 +10,7 @@ from chromatix.typing import ScalarLike
 from .. import functional as cf
 from ..field import Field
 
-__all__ = ["ThinLens", "FFLens", "DFLens"]
+__all__ = ["ThinLens", "FFLens", "DFLens", "FDLens"]
 
 
 class ThinLens(nn.Module):
@@ -108,3 +108,38 @@ class DFLens(nn.Module):
         n = register(self, "n")
         NA = register(self, "NA")
         return cf.df_lens(field, d, f, n, NA, inverse=self.inverse)
+
+
+class FDLens(nn.Module):
+    """
+    Applies a thin lens placed a distance ``f`` after the incoming ``Field``.
+    This element returns the ``Field`` a distance ``d`` after the lens.
+
+    This element can be placed after any element that returns a ``Field`` or
+    before any element that accepts a ``Field``.
+
+    The attributes ``f``, ``d``, ``n``, and ``NA`` can be learned by using
+    ``chromatix.utils.trainable``.
+
+    Attributes:
+        f: Distance from the incoming ``Field`` to the lens.
+        d: Distance propagated after the lens.
+        n: Refractive index of the lens.
+        NA: If provided, the NA of the lens. By default, no pupil is applied
+            to the incoming ``Field``.
+        inverse: Whether to use negative distances (default is False).
+    """
+
+    f: ScalarLike | Callable[[PRNGKey], Array]
+    d: ScalarLike | Callable[[PRNGKey], Array]
+    n: ScalarLike | Callable[[PRNGKey], Array]
+    NA: ScalarLike | Callable[[PRNGKey], Array] | None = None
+    inverse: bool = False
+
+    @nn.compact
+    def __call__(self, field: Field) -> Field:
+        f = register(self, "f")
+        d = register(self, "d")
+        n = register(self, "n")
+        NA = register(self, "NA")
+        return cf.fd_lens(field, f, d, n, NA, inverse=self.inverse)

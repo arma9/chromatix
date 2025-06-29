@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../../neural_photonics/gnn-cavity"
+		},
+		{
+			"path": "../../../../neural_photonics/pcc-net"
+		}
+	],
+	"settings": {}
+}
